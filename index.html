@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Listas de Tarefas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #1a202c; color: #e2e8f0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 2rem; }
+        .container { background-color: #2d3748; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); width: 100%; max-width: 900px; }
+        .tabs-container { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 0.5rem; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #4a5568; scrollbar-width: thin; scrollbar-color: #4a5568 #2d3748; }
+        .tabs-container::-webkit-scrollbar { height: 8px; }
+        .tabs-container::-webkit-scrollbar-track { background: #2d3748; }
+        .tabs-container::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 20px; border: 2px solid #2d3748; }
+        .tab-btn { white-space: nowrap; background-color: #4a5568; color: #e2e8f0; padding: 0.75rem 1.5rem; border-radius: 9999px; font-size: 1.125rem; cursor: pointer; transition: all 0.3s ease; position: relative; display: flex; align-items: center; }
+        .tab-btn:hover { background-color: #6a748c; }
+        .tab-btn.active { background-color: #3182ce; box-shadow: 0 0 0 4px rgba(49, 130, 206, 0.5); }
+        .tab-btn.completed { background-color: #48bb78; }
+        .tab-btn .delete-tab-btn { margin-left: 0.5rem; background: none; border: none; color: #e53e3e; font-weight: bold; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0; transition: color 0.2s; }
+        .tab-btn .delete-tab-btn:hover { color: #c53030; }
+        .task-list { list-style: none; padding: 0; margin-top: 1rem; }
+        .task-item { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid #4a5568; transition: all 0.3s ease; }
+        .task-item:last-child { border-bottom: none; }
+        .task-content { display: flex; align-items: center; flex-grow: 1; }
+        .task-text { margin-left: 1rem; word-break: break-word; flex-grow: 1; transition: all 0.3s ease; cursor: pointer; }
+        .task-text:hover { color: #48bb78; }
+        .task-completed .task-text { text-decoration: line-through; color: #a0aec0; }
+        .delete-btn { background-color: transparent; color: #e53e3e; border: none; font-size: 1.5rem; cursor: pointer; transition: color 0.2s ease; }
+        .delete-btn:hover { color: #c53030; }
+        .checkbox { width: 1.5rem; height: 1.5rem; border-radius: 0.25rem; cursor: pointer; border: 2px solid #a0aec0; background-color: transparent; position: relative; appearance: none; -webkit-appearance: none; }
+        .checkbox:checked { background-color: #48bb78; border-color: #48bb78; }
+        .checkbox:checked::after { content: ''; position: absolute; top: 50%; left: 50%; width: 0.5rem; height: 1rem; border: solid white; border-width: 0 3px 3px 0; transform: translate(-50%, -60%) rotate(45deg); }
+        .add-tab-btn { min-width: 4rem; text-align: center; }
+        .edit-buttons { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+        #subTabsContainer .tab-btn { font-size: 1rem; padding: 0.5rem 1rem; }
+        /* Estilos para login */
+        .auth-container, .app-container { transition: opacity 0.5s ease-in-out; }
+        .form-input { flex-grow: 1; padding: 0.75rem; border-radius: 0.5rem; background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; focus:outline-none focus:ring-2 focus:ring-blue-500; }
+        .form-btn { background-color: #3182ce; color: white; font-semibold; py: 2; px: 4; border-radius: 0.5rem; hover:bg-blue-700 transition-colors duration-200; padding: 0.75rem 1.5rem; }
+    </style>
+</head>
+<body class="bg-gray-800 text-gray-200">
+
+    <div class="container">
+        <div id="authContainer" class="auth-container">
+            <h1 class="text-2xl font-bold mb-6 text-center">Login ou Cadastro</h1>
+            <div class="space-y-4">
+                <input type="email" id="emailInput" placeholder="Seu e-mail" class="w-full form-input">
+                <input type="password" id="passwordInput" placeholder="Sua senha (mínimo 6 caracteres)" class="w-full form-input">
+                <div class="flex gap-4">
+                    <button id="loginBtn" class="w-full form-btn">Entrar</button>
+                    <button id="signupBtn" class="w-full form-btn">Cadastrar</button>
+                </div>
+                 <p id="authError" class="text-red-400 text-center mt-2"></p>
+            </div>
+        </div>
+
+        <div id="appContainer" class="app-container hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-2xl font-bold">Gerenciador de Tarefas</h1>
+                <div>
+                    <span id="userEmail" class="text-sm text-gray-400 mr-4"></span>
+                    <button id="logoutBtn" class="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors duration-200">Sair</button>
+                </div>
+            </div>
+
+            <div class="tabs-container" id="mainTabsContainer"></div>
+            <div class="tabs-container" id="subTabsContainer"></div>
+
+            <div class="tasks-panel">
+                <h2 id="currentListTitle" class="text-xl font-bold mb-4 text-center"></h2>
+                <div class="flex flex-col sm:flex-row gap-4 mb-6">
+                    <input type="text" id="taskInput" placeholder="Adicione uma nova tarefa..." class="flex-grow p-3 rounded-xl bg-gray-700 text-gray-200 border border-transparent focus:border-blue-500 focus:outline-none placeholder-gray-400">
+                    <button id="addTaskBtn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 transition-colors">Adicionar</button>
+                </div>
+                <ul id="taskList" class="task-list"></ul>
+            </div>
+            
+            <div class="edit-buttons">
+                <button id="duplicateListBtn" class="bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:bg-indigo-700 transition-colors">Duplicar Aba</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ***************************************************************
+        // ******** INÍCIO DA CONFIGURAÇÃO DO FIREBASE *********************
+        // ***************************************************************
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCTCv1iyp7QXMz0lKnmX8UFLiNDQwFf8XI",
+  authDomain: "meu-gerenciador-tarefas-1f220.firebaseapp.com",
+  projectId: "meu-gerenciador-tarefas-1f220",
+  storageBucket: "meu-gerenciador-tarefas-1f220.firebasestorage.app",
+  messagingSenderId: "276870061068",
+  appId: "1:276870061068:web:c2c2ba15b9115b31056229"
+};
+        };
+
+        // Inicializa o Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let currentUser = null;
+        let userDocRef = null;
+        let unsubscribe = null; // Para desligar o listener do Firestore ao deslogar
+
+        // ***************************************************************
+        // ******** FIM DA CONFIGURAÇÃO DO FIREBASE ************************
+        // ***************************************************************
+
+        // Variáveis de estado da aplicação
+        let allLists = {};
+        let currentMainList = "";
+        let currentSubList = "";
+
+        // Elementos do DOM
+        const authContainer = document.getElementById('authContainer');
+        const appContainer = document.getElementById('appContainer');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const signupBtn = document.getElementById('signupBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const userEmail = document.getElementById('userEmail');
+        const authError = document.getElementById('authError');
+        
+        const mainTabsContainer = document.getElementById('mainTabsContainer');
+        const subTabsContainer = document.getElementById('subTabsContainer');
+        const currentListTitle = document.getElementById('currentListTitle');
+        const taskInput = document.getElementById('taskInput');
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        const taskList = document.getElementById('taskList');
+        const duplicateListBtn = document.getElementById('duplicateListBtn');
+
+        // FUNÇÕES DE AUTENTICAÇÃO
+        signupBtn.addEventListener('click', () => {
+            auth.createUserWithEmailAndPassword(emailInput.value, passwordInput.value)
+                .catch(error => { authError.textContent = `Erro no cadastro: ${error.message}`; });
+        });
+
+        loginBtn.addEventListener('click', () => {
+            auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
+                .catch(error => { authError.textContent = `Erro no login: ${error.message}`; });
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut();
+        });
+
+        // Listener principal do estado de autenticação
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // Usuário logado
+                currentUser = user;
+                userDocRef = db.collection('users').doc(currentUser.uid);
+                authContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                userEmail.textContent = currentUser.email;
+                authError.textContent = '';
+                
+                // Inicia o listener de dados em tempo real
+                listenForDataChanges();
+            } else {
+                // Usuário deslogado
+                currentUser = null;
+                userDocRef = null;
+                if(unsubscribe) unsubscribe(); // Para o listener anterior
+                
+                appContainer.classList.add('hidden');
+                authContainer.classList.remove('hidden');
+            }
+        });
+
+        // FUNÇÕES DE DADOS (AGORA COM FIREBASE)
+        async function updateFirestoreData() {
+            if (!userDocRef) return;
+            try {
+                // Atualiza o documento inteiro do usuário com os dados atuais
+                await userDocRef.set({ allLists, currentMainList, currentSubList });
+            } catch (error) {
+                console.error("Erro ao salvar no Firestore: ", error);
+                showMessageBox("Ocorreu um erro ao salvar suas alterações. Verifique sua conexão.");
+            }
+        }
+
+        function listenForDataChanges() {
+            if (!userDocRef) return;
+            
+            // O onSnapshot fica "ouvindo" qualquer mudança no documento em tempo real
+            unsubscribe = userDocRef.onSnapshot(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    allLists = data.allLists || { "Minha Lista": { "Padrão": [] } };
+                    currentMainList = data.currentMainList || Object.keys(allLists)[0];
+                    currentSubList = data.currentSubList || Object.keys(allLists[currentMainList])[0];
+                    
+                    // Validação para garantir que os dados atuais ainda existem
+                    if (!allLists[currentMainList]) {
+                        currentMainList = Object.keys(allLists)[0];
+                    }
+                    if (!allLists[currentMainList][currentSubList]) {
+                        currentSubList = Object.keys(allLists[currentMainList])[0];
+                    }
+
+                } else {
+                    // Se o usuário não tem dados, cria um estado inicial e salva
+                    console.log("Documento não encontrado, criando um novo...");
+                    allLists = { "Minha Lista": { "Padrão": [] } };
+                    currentMainList = "Minha Lista";
+                    currentSubList = "Padrão";
+                    updateFirestoreData(); // Salva o estado inicial no Firestore
+                }
+                // Re-renderiza toda a interface com os novos dados
+                renderAll();
+            }, error => {
+                console.error("Erro no listener do Firestore: ", error);
+                showMessageBox("Não foi possível carregar os dados. A página pode não funcionar corretamente.");
+            });
+        }
+
+        function renderAll() {
+            renderMainTabs();
+            renderSubTabs();
+            renderTasks();
+        }
+
+        // FUNÇÕES DE RENDERIZAÇÃO (praticamente inalteradas)
+        function checkSubTabCompletion(mainTabName, subTabName) {
+            const tasks = allLists[mainTabName]?.[subTabName] || [];
+            return tasks.length > 0 && tasks.every(task => task.completed);
+        }
+
+        function renderMainTabs() {
+            mainTabsContainer.innerHTML = '';
+            for (const listName in allLists) {
+                const tab = document.createElement('button');
+                tab.textContent = listName;
+                tab.className = `tab-btn ${listName === currentMainList ? 'active' : ''}`;
+                tab.addEventListener('click', () => {
+                    currentMainList = listName;
+                    currentSubList = Object.keys(allLists[currentMainList])[0];
+                    updateFirestoreData();
+                });
+                tab.addEventListener('dblclick', () => {
+                    const newName = prompt("Digite o novo nome para a aba:", listName);
+                    if (newName && newName.trim() && !allLists[newName.trim()]) {
+                        const sublists = allLists[listName];
+                        delete allLists[listName];
+                        allLists[newName.trim()] = sublists;
+                        currentMainList = newName.trim();
+                        updateFirestoreData();
+                    }
+                });
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-tab-btn';
+                deleteBtn.innerHTML = '&#x2715;';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (Object.keys(allLists).length > 1) {
+                        delete allLists[listName];
+                        if (currentMainList === listName) {
+                            currentMainList = Object.keys(allLists)[0];
+                            currentSubList = Object.keys(allLists[currentMainList])[0];
+                        }
+                        updateFirestoreData();
+                    } else {
+                        showMessageBox("Você não pode deletar a última aba principal!");
+                    }
+                });
+                tab.appendChild(deleteBtn);
+                mainTabsContainer.appendChild(tab);
+            }
+            const addTabBtn = document.createElement('button');
+            addTabBtn.textContent = '+';
+            addTabBtn.className = `tab-btn add-tab-btn`;
+            addTabBtn.addEventListener('click', addMainList);
+            mainTabsContainer.appendChild(addTabBtn);
+        }
+        
+        function renderSubTabs() {
+            subTabsContainer.innerHTML = '';
+            if(!allLists[currentMainList]) return;
+            const sublists = allLists[currentMainList];
+            for (const sublistName in sublists) {
+                const tab = document.createElement('button');
+                tab.textContent = sublistName;
+                const isCompleted = checkSubTabCompletion(currentMainList, sublistName);
+                tab.className = `tab-btn ${sublistName === currentSubList ? 'active' : ''} ${isCompleted ? 'completed' : ''}`;
+                tab.addEventListener('click', () => {
+                    currentSubList = sublistName;
+                    updateFirestoreData();
+                });
+                tab.addEventListener('dblclick', () => {
+                    const newName = prompt("Digite o novo nome para a sub-aba:", sublistName);
+                    if (newName && newName.trim() && !allLists[currentMainList][newName.trim()]) {
+                        const tasks = allLists[currentMainList][sublistName];
+                        delete allLists[currentMainList][sublistName];
+                        allLists[currentMainList][newName.trim()] = tasks;
+                        currentSubList = newName.trim();
+                        updateFirestoreData();
+                    }
+                });
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-tab-btn';
+                deleteBtn.innerHTML = '&#x2715;';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (Object.keys(allLists[currentMainList]).length > 1) {
+                        delete allLists[currentMainList][sublistName];
+                        if (currentSubList === sublistName) {
+                            currentSubList = Object.keys(allLists[currentMainList])[0];
+                        }
+                        updateFirestoreData();
+                    } else {
+                        showMessageBox("Você não pode deletar a última sub-aba!");
+                    }
+                });
+                tab.appendChild(deleteBtn);
+                subTabsContainer.appendChild(tab);
+            }
+            const addSubTabBtn = document.createElement('button');
+            addSubTabBtn.textContent = '+';
+            addSubTabBtn.className = `tab-btn add-tab-btn`;
+            addSubTabBtn.addEventListener('click', addSubList);
+            subTabsContainer.appendChild(addSubTabBtn);
+        }
+
+        function renderTasks() {
+            taskList.innerHTML = '';
+            if(!currentMainList || !currentSubList || !allLists[currentMainList] || !allLists[currentMainList][currentSubList]) {
+                 currentListTitle.textContent = "Carregando...";
+                 return;
+            }
+            currentListTitle.textContent = `${currentMainList} > ${currentSubList}`;
+            const tasks = allLists[currentMainList][currentSubList];
+            if (tasks && tasks.length > 0) {
+                tasks.forEach((task, index) => {
+                    const li = createTaskElement(task.text, task.completed, index);
+                    taskList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = `A aba "${currentSubList}" está vazia. Adicione uma tarefa!`;
+                li.className = 'text-center text-gray-400 italic';
+                taskList.appendChild(li);
+            }
+        }
+
+        function createTaskElement(taskText, isCompleted, index) {
+            const li = document.createElement('li');
+            li.className = `task-item ${isCompleted ? 'task-completed' : ''}`;
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'task-content';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'checkbox';
+            checkbox.checked = isCompleted;
+            checkbox.addEventListener('change', () => {
+                allLists[currentMainList][currentSubList][index].completed = checkbox.checked;
+                updateFirestoreData();
+            });
+            const taskSpan = document.createElement('span');
+            taskSpan.className = 'task-text';
+            taskSpan.textContent = taskText;
+            taskSpan.addEventListener('dblclick', () => {
+                const newText = prompt("Edite a tarefa:", taskText);
+                if (newText && newText.trim()) {
+                    allLists[currentMainList][currentSubList][index].text = newText.trim();
+                    updateFirestoreData();
+                }
+            });
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = '&#x2715;';
+            deleteBtn.addEventListener('click', () => {
+                allLists[currentMainList][currentSubList].splice(index, 1);
+                updateFirestoreData();
+            });
+            contentDiv.appendChild(checkbox);
+            contentDiv.appendChild(taskSpan);
+            li.appendChild(contentDiv);
+            li.appendChild(deleteBtn);
+            return li;
+        }
+
+        // FUNÇÕES DE AÇÃO (agora chamam updateFirestoreData)
+        function addMainList() {
+            let newListName = `Nova Lista ${Object.keys(allLists).length + 1}`;
+            while(allLists[newListName]) {
+                newListName = `${newListName}*`;
+            }
+            allLists[newListName] = { "Padrão": [] };
+            currentMainList = newListName;
+            currentSubList = "Padrão";
+            updateFirestoreData();
+        }
+
+        function addSubList() {
+            let newListName = `Nova Sub-aba ${Object.keys(allLists[currentMainList]).length + 1}`;
+             while(allLists[currentMainList][newListName]) {
+                newListName = `${newListName}*`;
+            }
+            allLists[currentMainList][newListName] = [];
+            currentSubList = newListName;
+            updateFirestoreData();
+        }
+
+        function duplicateList() {
+            if (currentSubList) {
+                let newListName = `${currentSubList} (Cópia)`;
+                let i = 1;
+                while (allLists[currentMainList][newListName]) {
+                    i++;
+                    newListName = `${currentSubList} (Cópia ${i})`;
+                }
+                allLists[currentMainList][newListName] = JSON.parse(JSON.stringify(allLists[currentMainList][currentSubList]));
+                currentSubList = newListName;
+                updateFirestoreData();
+            }
+        }
+
+        function addTask() {
+            const taskText = taskInput.value.trim();
+            if (taskText !== '') {
+                if(!allLists[currentMainList][currentSubList]) {
+                    allLists[currentMainList][currentSubList] = [];
+                }
+                allLists[currentMainList][currentSubList].push({ text: taskText, completed: false });
+                taskInput.value = '';
+                updateFirestoreData();
+            }
+        }
+        
+        addTaskBtn.addEventListener('click', addTask);
+        taskInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTask(); });
+        duplicateListBtn.addEventListener('click', duplicateList);
+
+        function showMessageBox(message) {
+            const box = document.createElement('div');
+            box.innerHTML = `<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"><div class="bg-gray-700 p-8 rounded-xl shadow-lg max-w-sm w-full text-center"><p class="text-white mb-4">${message}</p><button id="close-msg" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Fechar</button></div></div>`;
+            document.body.appendChild(box);
+            document.getElementById('close-msg').addEventListener('click', () => document.body.removeChild(box));
+        }
+
+    </script>
+</body>
+</html>
