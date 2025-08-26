@@ -41,6 +41,9 @@
         .auth-container, .app-container { transition: opacity 0.5s ease-in-out; }
         .form-input { flex-grow: 1; padding: 0.75rem; border-radius: 0.5rem; background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; focus:outline-none focus:ring-2 focus:ring-blue-500; }
         .form-btn { background-color: #3182ce; color: white; font-semibold; py: 2; px: 4; border-radius: 0.5rem; hover:bg-blue-700 transition-colors duration-200; padding: 0.75rem 1.5rem; }
+        
+        /* CLASSE DE FALLBACK PARA ESCONDER ELEMENTOS (CORREÇÃO) */
+        .escondido { display: none; }
     </style>
 </head>
 <body class="bg-gray-800 text-gray-200">
@@ -59,7 +62,7 @@
             </div>
         </div>
 
-        <div id="appContainer" class="app-container hidden">
+        <div id="appContainer" class="app-container escondido">
             <div class="flex justify-between items-center mb-4">
                 <h1 class="text-2xl font-bold">Gerenciador de Tarefas</h1>
                 <div>
@@ -99,7 +102,6 @@
   messagingSenderId: "276870061068",
   appId: "1:276870061068:web:c2c2ba15b9115b31056229"
 };
-        };
 
         // Inicializa o Firebase
         firebase.initializeApp(firebaseConfig);
@@ -158,8 +160,8 @@
                 // Usuário logado
                 currentUser = user;
                 userDocRef = db.collection('users').doc(currentUser.uid);
-                authContainer.classList.add('hidden');
-                appContainer.classList.remove('hidden');
+                authContainer.classList.add('escondido');
+                appContainer.classList.remove('escondido');
                 userEmail.textContent = currentUser.email;
                 authError.textContent = '';
                 
@@ -171,8 +173,8 @@
                 userDocRef = null;
                 if(unsubscribe) unsubscribe(); // Para o listener anterior
                 
-                appContainer.classList.add('hidden');
-                authContainer.classList.remove('hidden');
+                appContainer.classList.add('escondido');
+                authContainer.classList.remove('escondido');
             }
         });
 
